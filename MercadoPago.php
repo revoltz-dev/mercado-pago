@@ -12,6 +12,27 @@ class MercadoPago
     }
 
     /**
+     * Gera uma chave de idempotência única (UUID v4)
+     * Obrigatório desde Janeiro/2024
+     *
+     * @return string UUID único
+     */
+    private function generate_idempotency_key()
+    {
+        return sprintf(
+            '%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
+            mt_rand(0, 0xffff),
+            mt_rand(0, 0xffff),
+            mt_rand(0, 0xffff),
+            mt_rand(0, 0x0fff) | 0x4000,
+            mt_rand(0, 0x3fff) | 0x8000,
+            mt_rand(0, 0xffff),
+            mt_rand(0, 0xffff),
+            mt_rand(0, 0xffff)
+        );
+    }
+
+    /**
      * Gera um pagamento (PIX ou boleto) via API do Mercado Pago.
      *
      * @param array $order_data Dados do pedido (amount, description, payer_email, etc.).
@@ -20,7 +41,7 @@ class MercadoPago
      */
     public function generatePayment($order_data, $payment_method = 'pix')
     {
-        $api = "https://api.mercadopago.com/v1/payments?access_token={$this->access_token}";
+        $api = "https://api.mercadopago.com/v1/payments";
         $data = [
             "external_reference" => $order_data['ref'],
             "transaction_amount" => $order_data['amount'],
@@ -42,6 +63,8 @@ class MercadoPago
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_HTTPHEADER, [
             "Content-Type: application/json",
+            "Authorization: Bearer {$this->access_token}",
+            "X-Idempotency-Key: " . $this->generate_idempotency_key()
         ]);
         curl_setopt($ch, CURLOPT_POST, true);
         curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
@@ -61,14 +84,20 @@ class MercadoPago
             return ["error" => $payment_info['error']];
         }
 
+        if (isset($payment_info['message'])) {
+            return ["error" => $payment_info['message']];
+        }
+
         if ($payment_method === 'pix') {
             return [
+                'payment_id' => $payment_info['id'] ?? null,
                 'qr_code' => $payment_info['point_of_interaction']['transaction_data']['qr_code'],
                 'qr_code_base64' => $payment_info['point_of_interaction']['transaction_data']['qr_code_base64'],
                 'payment_url' => $payment_info['point_of_interaction']['transaction_data']['ticket_url']
             ];
         } elseif ($payment_method === 'bolbradesco') {
             return [
+                'payment_id' => $payment_info['id'] ?? null,
                 'boleto_url' => $payment_info['transaction_details']['external_resource_url'],
                 'boleto_barcode' => $payment_info['transaction_details']['barcode']['content']
             ];
