@@ -1,4 +1,4 @@
-# Mercado Pago Integration (PIX & Boleto) — No SDK
+# Mercado Pago API
 
 A lightweight PHP integration with the Mercado Pago API to generate payments via PIX and Brazilian bank slips (Boleto), plus payment status checks — without using the official SDK.
 
